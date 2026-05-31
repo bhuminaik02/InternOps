@@ -1,14 +1,16 @@
-﻿const redis = require('redis'); // will need to install redis package
+﻿const redis = require('redis');
 const config = require('./index');
 
-// Placeholder for future Redis integration – currently unused
-const client = config.redisUrl
-  ? redis.createClient({ url: config.redisUrl })
-  : null;
+let client = null;
 
-if (client) {
-  client.on('error', (err) => console.error('Redis Client Error', err));
-  client.connect();
+async function getRedisClient() {
+  if (!client && config.redisUrl) {
+    client = redis.createClient({ url: config.redisUrl });
+    client.on('error', (err) => console.error('Redis Client Error', err));
+    await client.connect();
+    console.log('Redis connected');
+  }
+  return client;
 }
 
-module.exports = client;
+module.exports = { getRedisClient };

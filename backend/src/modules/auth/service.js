@@ -33,7 +33,7 @@ async function login(email, password, ip, userAgent) {
   const access = generateAccessToken(user);
   const refresh = generateRefreshToken(user);
   const expires = new Date(Date.now() + 7*24*60*60*1000);
-  await repo.storeRefreshToken(user.id, hashToken(refresh), expires);
+  await repo.storeRefreshTokenRedis(user.id, hashToken(refresh), expires);
   await createAuditLog({ userId:user.id, action:'LOGIN', ipAddress:ip, userAgent });
   return {
     accessToken: access,
@@ -49,16 +49,17 @@ async function refreshTokens(token, ip) {
   const pool = require('../../config/db');
   const { rows } = await pool.query('SELECT * FROM refresh_tokens WHERE token_hash=$1 AND revoked=FALSE AND expires_at>NOW()', [hash]);
   if(rows.length===0) throw new Error('Token revoked/expired');
-  await repo.revokeRefreshToken(hash);
+  await repo.revokeRefreshTokenRedis(hash);
   const user = await repo.findById(decoded.id);
   if(!user||user.suspended) throw new Error('User not found/suspended');
   const newAccess = generateAccessToken(user);
   const newRefresh = generateRefreshToken(user);
   const newExpiry = new Date(Date.now()+7*24*60*60*1000);
-  await repo.storeRefreshToken(user.id, hashToken(newRefresh), newExpiry);
+  await repo.storeRefreshTokenRedis(user.id, hashToken(newRefresh), newExpiry);
   return { accessToken:newAccess, refreshToken:newRefresh };
 }
 
-async function logout(token) { await repo.revokeRefreshToken(hashToken(token)); }
+async function logout(token) { await repo.revokeRefreshTokenRedis(hashToken(token)); }
 
 module.exports = { register, login, refreshTokens, logout };
+
