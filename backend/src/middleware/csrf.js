@@ -35,5 +35,6 @@ const csrfMiddleware = async (request, reply) => {
     return reply.status(403).send({ error: 'CSRF token missing or invalid' });
   }
 };
+const csrfProtection = csrfMiddleware;
 
-module.exports = { generateToken, csrfMiddleware };
+module.exports = { generateToken, csrfMiddleware, csrfProtection };
