@@ -5,6 +5,8 @@ import useAuthStore from '../store/auth'
 import CreateTaskForm from '../components/CreateTaskForm'
 import { PageHeader, Card, Btn, Badge, EmptyState, Spinner } from '../components/ui'
 
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000'
+
 const PLATFORM_ICON = { LinkedIn: '💼', Instagram: '📸', Twitter: '🐦', Facebook: '👍', YouTube: '▶️' }
 
 export default function Tasks() {
@@ -43,6 +45,14 @@ export default function Tasks() {
   }
 
   const overdue = (d) => new Date(d) < new Date()
+
+  const getImageUrl = (imagePath) => {
+  if (!imagePath) return ''
+
+  const normalizedPath = imagePath.replace(/^\/+/, '')
+
+  return `${API_BASE}/${normalizedPath}`
+}
 
   return (
     <div>
@@ -96,7 +106,16 @@ export default function Tasks() {
                   <h4 className="text-sm font-semibold text-gray-700">Proof submissions</h4>
                   {!proofs?.length ? <p className="text-xs text-gray-400">No submissions yet.</p> : proofs.map(p => (
                     <div key={p.id} className="flex items-center gap-3 bg-gray-50 rounded-xl p-2">
-                      {p.image_path && <img src={'/' + p.image_path.replace(/^\/?/, '')} alt="proof" className="w-14 h-14 rounded-lg object-cover border" />}
+                      {p.image_path && (
+              <img
+                src={getImageUrl(p.image_path)}
+                alt="proof"
+                className="w-14 h-14 rounded-lg object-cover border"
+                onError={(e) => {
+                  e.currentTarget.style.display = 'none'
+                }}
+              />
+            )}
                       <div className="flex-1 min-w-0 text-xs">
                         <Badge color={p.status === 'VERIFIED' ? 'green' : 'yellow'}>{p.status}</Badge>
                         <p className="text-gray-400 mt-1 truncate">Intern: {p.intern_id.slice(0, 8)}…</p>
