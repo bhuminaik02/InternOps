@@ -40,10 +40,36 @@ async function submitProof(taskId, internId, imagePath) {
   return res.rows[0];
 }
 async function verifyProof(proofId, verifierId) {
+  const proofRes = await pool.query(
+    'SELECT intern_id FROM proof_submissions WHERE id = $1',
+    [proofId]
+  );
+
+  if (proofRes.rowCount === 0) {
+    throw new Error('Proof not found');
+  }
+
+  const { isDirectManager } = require('../../utils/hierarchy');
+
+  const allowed = await isDirectManager(
+    verifierId,
+    proofRes.rows[0].intern_id
+  );
+
+  if (!allowed) {
+    throw new Error('Forbidden: not your direct report');
+  }
+
   const res = await pool.query(
-    "UPDATE proof_submissions SET verified_by=$1, verified_at=NOW(), status='VERIFIED' WHERE id=$2 RETURNING *",
+    `UPDATE proof_submissions
+     SET verified_by = $1,
+         verified_at = NOW(),
+         status = 'VERIFIED'
+     WHERE id = $2
+     RETURNING *`,
     [verifierId, proofId]
   );
+
   return res.rows[0];
 }
 async function getProofsByTask(taskId) {
