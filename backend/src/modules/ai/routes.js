@@ -30,6 +30,12 @@ async function routes(fastify) {
         content: result.content,
       };
     } catch (error) {
+      if (error.statusCode === 413) {
+        return reply.status(413).send({
+          error: 'AI provider response too large',
+        });
+      }
+
       return reply.status(503).send({
         error: 'AI service unavailable',
         details: error.details || [],
