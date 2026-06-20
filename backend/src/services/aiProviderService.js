@@ -1,14 +1,25 @@
 const crypto = require('crypto');
+const { LRUCache } = require('lru-cache');
 const config = require('../config');
 
 const failureState = new Map();
-const responseCache = new Map();
 
 const FAILURE_LIMIT = Number(process.env.AI_PROVIDER_FAILURE_LIMIT || 3);
 const COOLDOWN_MS = Number(
   process.env.AI_PROVIDER_COOLDOWN_MS || 5 * 60 * 1000
 );
 const CACHE_TTL_MS = Number(process.env.AI_CACHE_TTL_MS || 5 * 60 * 1000);
+const CACHE_MAX_ENTRIES = Number(process.env.AI_CACHE_MAX_ENTRIES || 5000);
+const MAX_RESPONSE_BYTES = Number(
+  process.env.AI_MAX_RESPONSE_BYTES || 2 * 1024 * 1024 // 2MB default cap
+);
+
+// Bounded LRU cache — fixes unbounded Map growth (OOM DoS, attack #2).
+// max entries + ttl give a hard ceiling on memory regardless of attack volume.
+const responseCache = new LRUCache({
+  max: CACHE_MAX_ENTRIES,
+  ttl: CACHE_TTL_MS,
+});
 
 function isPlaceholder(value) {
   return !value || value.startsWith('your-');
@@ -23,33 +34,21 @@ function getProviderOrder() {
     .filter(Boolean);
 }
 
-function getCacheKey(payload) {
+function getCacheKey(userId, messages) {
   return crypto
     .createHash('sha256')
-    .update(JSON.stringify(payload))
+    .update(JSON.stringify({ userId, messages }))
     .digest('hex');
 }
 
-function getCachedResponse(payload) {
+function getCachedResponse(payload, value) {
   const key = getCacheKey(payload);
-  const cached = responseCache.get(key);
-
-  if (!cached) return null;
-
-  if (Date.now() > cached.expiresAt) {
-    responseCache.delete(key);
-    return null;
-  }
-
-  return cached.value;
+  return responseCache.get(key) || null;
 }
 
 function setCachedResponse(payload, value) {
   const key = getCacheKey(payload);
-  responseCache.set(key, {
-    value,
-    expiresAt: Date.now() + CACHE_TTL_MS,
-  });
+  responseCache.set(key, value);
 }
 
 function isProviderOpen(name) {
@@ -98,6 +97,16 @@ async function fetchWithTimeout(url, options = {}) {
       ...options,
       signal: controller.signal,
     });
+    // Reject oversized responses before buffering the body into memory.
+    // Closes the stream-amplification OOM path
+    const contentLength = response.headers.get('content-length');
+    if (contentLength && Number(contentLength) > MAX_RESPONSE_BYTES) {
+      throw new Error(
+        `Response exceeds maximum allowed size of ${MAX_RESPONSE_BYTES} bytes`
+      );
+    }
+
+    return response;
   } finally {
     clearTimeout(timer);
   }
@@ -265,8 +274,8 @@ const providerRegistry = {
   },
 };
 
-async function generateAIResponse({ messages }) {
-  const payload = { messages };
+async function generateAIResponse({ messages,userId }) {
+  const payload = { userId, messages };
   const cached = getCachedResponse(payload);
 
   if (cached) {

@@ -4,8 +4,19 @@ const {
   getProviderHealth,
 } = require('../../services/aiProviderService');
 
+const AI_CHAT_RATE_LIMIT = Number(process.env.AI_CHAT_RATE_LIMIT_PER_MIN || 10);
+
 async function routes(fastify) {
-  fastify.post('/chat', { preHandler: [auth] }, async (req, reply) => {
+  fastify.post('/chat', { preHandler: [auth], 
+    config: {
+        rateLimit: {
+          max: AI_CHAT_RATE_LIMIT,
+          timeWindow: '1 minute',
+          keyGenerator: (req) => req.user?.id || req.ip,
+        },
+      },
+    }, 
+    async (req, reply) => {
     const { messages, prompt } = req.body || {};
 
     const finalMessages =
@@ -22,6 +33,7 @@ async function routes(fastify) {
     try {
       const result = await generateAIResponse({
         messages: finalMessages,
+        userId: req.user.id,
       });
 
       return {
@@ -35,7 +47,8 @@ async function routes(fastify) {
         details: error.details || [],
       });
     }
-  });
+  }
+  );
 
   fastify.get('/health', { preHandler: [auth] }, async () => {
     return {
