@@ -173,6 +173,43 @@ async function validateRefreshToken(tokenHash) {
   return rows.length > 0;
 }
 
+// Atomically claim a refresh token — returns userId string if claimed, null if
+// already used/revoked (race condition or replay attack).
+async function claimRefreshToken(tokenHash) {
+  const redis = await getRedisClient();
+  if (redis) {
+    // Lua script: GET then DEL only if key still exists — atomic, no TOCTOU.
+    const lua = `
+      local val = redis.call('GET', KEYS[1])
+      if val then
+        redis.call('DEL', KEYS[1])
+        return val
+      end
+      return false
+    `;
+    const raw = await redis.eval(lua, {
+      keys: [`refresh_token:${tokenHash}`],
+      arguments: [],
+    });
+    if (!raw) return null;
+    try {
+      return JSON.parse(raw).userId;
+    } catch {
+      return raw; // legacy plain-string fallback
+    }
+  }
+  // Postgres fallback: atomic UPDATE — only one concurrent request can flip
+  // revoked=FALSE → TRUE; the second gets 0 rows back.
+  const { rows } = await pool.query(
+    `UPDATE refresh_tokens
+     SET revoked = TRUE
+     WHERE token_hash = $1 AND revoked = FALSE AND expires_at > NOW()
+     RETURNING user_id`,
+    [tokenHash]
+  );
+  return rows[0]?.user_id ?? null;
+}
+
 async function revokeRefreshTokenRedis(tokenHash) {
   const redis = await getRedisClient();
   if (redis) {
@@ -220,4 +257,5 @@ module.exports = {
   revokeAllUserTokensRedis,
   getRefreshTokenRedis,
   validateRefreshToken,
+  claimRefreshToken,
 };
