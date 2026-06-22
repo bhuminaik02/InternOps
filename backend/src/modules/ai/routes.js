@@ -60,7 +60,7 @@ async function routes(fastify) {
     }
   );
 
-   fastify.get(
+  fastify.get(
     '/health',
     {
       preHandler: [auth, rbac('ADMIN')],
