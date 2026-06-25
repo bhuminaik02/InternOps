@@ -23,6 +23,7 @@ export default function CreateTaskForm() {
   });
   const [msg, setMsg] = useState('');
   const [error, setError] = useState('');
+  const [otherPlatform, setOtherPlatform] = useState('');   
 
   const createMutation = useMutation({
     mutationFn: (data) => api.post('/tasks', data),
@@ -50,12 +51,19 @@ export default function CreateTaskForm() {
       {error && <p className="text-rose-600 text-sm mb-2">{error}</p>}
       {msg && <p className="text-green-600 text-sm mb-2">{msg}</p>}
       <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          createMutation.mutate(form);
-        }}
-        className="space-y-3"
-      >
+      onSubmit={(e) => {
+        e.preventDefault();
+
+        createMutation.mutate({
+          ...form,
+          targetPlatform:
+            form.targetPlatform === 'Other' && otherPlatform.trim()
+              ? otherPlatform.trim()
+              : form.targetPlatform,
+        });
+      }}
+  className="space-y-3"
+>
         <Input
           placeholder="Task title"
           value={form.title}
@@ -81,6 +89,16 @@ export default function CreateTaskForm() {
               </option>
             ))}
           </Select>
+
+            {form.targetPlatform === 'Other' && (
+              <Input
+                type="text"
+                placeholder="Enter custom platform (optional)"
+                value={otherPlatform}
+                onChange={(e) => setOtherPlatform(e.target.value)}
+              />
+            )}
+
           <Input
             type="datetime-local"
             value={form.deadline}
