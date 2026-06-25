@@ -1,5 +1,5 @@
 const pool = require('../config/db');
-async function checkHierarchyAccess(requesterId, targetUserId) {
+async function checkHierarchyAccess(requesterId, targetUserId, client = pool) {
   if (requesterId === targetUserId) return true;
 
   const usersRes = await pool.query(
@@ -22,15 +22,17 @@ async function checkHierarchyAccess(requesterId, targetUserId) {
   }
 
   const query = `WITH RECURSIVE chain AS (
-    SELECT id, manager_id FROM users WHERE id = $1
+    SELECT id, manager_id, 0 AS depth FROM users WHERE id = $1 AND deleted_at IS NULL
     UNION ALL
-    SELECT u.id, u.manager_id FROM users u INNER JOIN chain ON u.id = chain.manager_id
+    SELECT u.id, u.manager_id, chain.depth + 1
+    FROM users u INNER JOIN chain ON u.id = chain.manager_id
+    WHERE u.deleted_at IS NULL AND chain.depth < 100
   ) SELECT 1 FROM chain WHERE id = $2`;
-  const res = await pool.query(query, [targetUserId, requesterId]);
+  const res = await client.query(query, [targetUserId, requesterId]);
   return res.rowCount > 0;
 }
-async function isDirectManager(managerId, subordinateId) {
-  const res = await pool.query('SELECT manager_id FROM users WHERE id = $1', [
+async function isDirectManager(managerId, subordinateId, client = pool) {
+  const res = await client.query('SELECT manager_id FROM users WHERE id = $1', [
     subordinateId,
   ]);
   return res.rows[0]?.manager_id === managerId;
