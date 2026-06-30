@@ -245,6 +245,60 @@ app.addHook('onResponse', async (request) => {
 });
 
 app.setErrorHandler((error, request, reply) => {
+  // Fastify AJV validation errors from schema.body / params / querystring.
+  // These are safe to return as structured client-facing validation errors.
+  if (error.validation) {
+    request.log.warn(
+      {
+        statusCode: 400,
+        message: error.message,
+        validation: error.validation,
+        method: request.method,
+        url: request.url,
+        params: request.params,
+        query: request.query,
+        userId: request.user?.id || null,
+        role: request.user?.role || null,
+      },
+      'Validation error'
+    );
+
+    return reply.status(400).send({
+      error: 'Validation error',
+      details: error.validation.map((v) => ({
+        path: v.instancePath || v.dataPath,
+        message: v.message,
+        keyword: v.keyword,
+      })),
+    });
+  }
+
+  // Zod validation errors.
+  // Return validation details, but do not expose stack traces or internal debug info.
+  if (error.name === 'ZodError' || Array.isArray(error.issues)) {
+    request.log.warn(
+      {
+        statusCode: 400,
+        message: error.message,
+        issues: error.issues || [],
+        method: request.method,
+        url: request.url,
+        params: request.params,
+        query: request.query,
+        userId: request.user?.id || null,
+        role: request.user?.role || null,
+      },
+      'Zod validation error'
+    );
+
+    return reply.status(400).send({
+      error: 'Validation error',
+      details: error.issues || [],
+    });
+  }
+
+  // Preserve safe messages for explicit HTTP/client errors and AppError instances.
+  // Hide internal details for unexpected server errors.
   const statusCode = error.statusCode || 500;
   const isClientError = statusCode >= 400 && statusCode < 500;
   const isOperational = error.isOperational === true;
