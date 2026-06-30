@@ -245,24 +245,36 @@ app.addHook('onResponse', async (request) => {
 });
 
 app.setErrorHandler((error, request, reply) => {
-  request.log.error(error);
+  const statusCode = error.statusCode || 500;
+  const isClientError = statusCode >= 400 && statusCode < 500;
+  const isOperational = error.isOperational === true;
 
-  if (error.name === 'ZodError' || Array.isArray(error.issues)) {
-    return reply.status(400).send({
-      error: 'Validation error',
-      details: error.issues || [],
-    });
+  const clientMessage =
+    isClientError || isOperational
+      ? error.message || 'Request failed'
+      : 'Internal Server Error';
+
+  const logPayload = {
+    statusCode,
+    message: error.message,
+    internalMessage: error.internalMessage || null,
+    stack: error.stack,
+    method: request.method,
+    url: request.url,
+    params: request.params,
+    query: request.query,
+    userId: request.user?.id || null,
+    role: request.user?.role || null,
+  };
+
+  if (statusCode >= 500) {
+    request.log.error(logPayload, 'Unhandled server error');
+  } else {
+    request.log.warn(logPayload, 'Request error');
   }
 
-  // Preserve messages for explicit HTTP errors, otherwise hide internal details
-  const statusCode = error.statusCode || 500;
-  const message =
-    statusCode < 500
-      ? error.message
-      : 'An unexpected error occurred. Please try again later.';
-
   return reply.status(statusCode).send({
-    error: message,
+    error: clientMessage,
   });
 });
 
