@@ -94,8 +94,9 @@ async function migrate(migrationsDir) {
   const dir = migrationsDir || path.resolve(__dirname, '../../migrations');
   const migrations = await loadMigrations(dir);
 
-  const client = await pool.connect();
+  let client;
   try {
+    client = await pool.connect();
     await client.query('BEGIN');
 
     await client.query(`
@@ -187,13 +188,18 @@ async function migrate(migrationsDir) {
 
     await client.query('COMMIT');
     log.info('All pending migrations applied successfully.');
-  } catch (e) {
+} catch (e) {
+  if (client) {
     await client.query('ROLLBACK').catch(() => {});
-    log.error({ err: e }, 'Migration error');
-    throw e;
-  } finally {
+  }
+
+  log.error({ err: e }, 'Migration error');
+  throw e;
+} finally {
+  if (client) {
     client.release();
   }
+}
 }
 
 module.exports = { migrate };
