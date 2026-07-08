@@ -188,18 +188,18 @@ async function migrate(migrationsDir) {
 
     await client.query('COMMIT');
     log.info('All pending migrations applied successfully.');
-} catch (e) {
-  if (client) {
-    await client.query('ROLLBACK').catch(() => {});
-  }
+  } catch (e) {
+    if (client) {
+      await client.query('ROLLBACK').catch(() => {});
+    }
 
-  log.error({ err: e }, 'Migration error');
-  throw e;
-} finally {
-  if (client) {
-    client.release();
+    log.error({ err: e }, 'Migration error');
+    throw e;
+  } finally {
+    if (client) {
+      client.release();
+    }
   }
-}
 }
 
 module.exports = { migrate };
