@@ -93,9 +93,13 @@ class EmailService {
   _checkBounce(to) {
     const bouncedAt = bounceList.get(to);
 
-    if (config.email.bounceCheckEnabled && bouncedAt && Date.now() - bouncedAt < BOUNCE_TTL_MS) {
+    if (
+      config.email.bounceCheckEnabled &&
+      bouncedAt &&
+      Date.now() - bouncedAt < BOUNCE_TTL_MS
+    ) {
       throw new Error(`Bounced address suppressed: ${to}`);
-   }
+    }
   }
 
   _render(templateName, data) {
